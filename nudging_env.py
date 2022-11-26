@@ -23,6 +23,10 @@ class NudgingEnv(gym.Env):
         # Define action and observation space
         
         self.action_space = spaces.Discrete(12)
+        self.donor_to_recipient = {0: [1,2,3],
+                                    1: [0,2,3],
+                                    2:[0,1,3],
+                                    3:[0,1,2]}
         # observations: each of the communities' resources, needs, prev actions
         # 4 + 4 + 30
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf,
@@ -44,28 +48,16 @@ class NudgingEnv(gym.Env):
     def step(self, action):
         self.prev_actions.append(action)
 
-        # from the discrete action value, get the doner and donee communities
-        donor = action//(NUM_COMMUNITIES-1)
-        donee_index = action%(NUM_COMMUNITIES-1)
-        i = 0
-        steps = 0
-        if donor == 0:
-            i = 1
-        while steps < donee_index:
-            if i == donor:
-                i += 1
-                continue
-            i += 1
-            steps += 1
-        donee = i
-        print(f'\nAction: {action}')
-        print(f'\nNudge suggested: Community {donor} donates to Community {donee}.')
+        # from the discrete action value, get the doner and recipient communities
+        [donor, recipient] = self.convert_action(action)
+        print(f'\nNudge suggested: Community {donor} donates to Community {recipient}.')
 
-        if self.communities[donor].available_resources <= self.communities[donor].required_resources or self.communities[donee].available_resources >= self.communities[donee].required_resources:
+        if self.communities[donor].available_resources <= self.communities[donor].required_resources or self.communities[recipient].available_resources >= self.communities[recipient].required_resources:
             # transaction doesnt make sense
-            self.reward = -100
+            self.reward = -150
             self.negative_reward += 1
             if self.negative_reward == 1000: # capping the episode when 1000 senseless transactions are suggested
+                self.reward = -1000 # high penalty for so many senseless transactions
                 self.done = True
                 print('\nCOMMUNITY RESOURCES')
                 for i in range(NUM_COMMUNITIES):
@@ -76,15 +68,15 @@ class NudgingEnv(gym.Env):
 
         else:
             # check if this nudge is accepted by the communities
-            self.communities[donee].simulate_current_conditions()
-            print(f'\nCurrent conditions in Community {self.communities[donee].id}: {self.communities[donee].current_conditions}')
-            # generate nudge message for the donor based on a bandit for this community and the current conditions for the donee community
+            self.communities[recipient].simulate_current_conditions()
+            print(f'\nCurrent conditions in Community {self.communities[recipient].id}: {self.communities[recipient].current_conditions}')
+            # generate nudge message for the donor based on a bandit for this community and the current conditions for the recipient community
             message_bandit = self.message_bandit_map[self.communities[donor]]
-            nudge_message, option = message_bandit.suggest(self.communities[donee].current_conditions)
+            nudge_message, option = message_bandit.suggest(self.communities[recipient].current_conditions)
             self.negative_reward = 0 # reset this, since a non-senseless transaction has been suggested
             
             # get response from both parties
-            response_donee  =False
+            response_recipient  =False
             response_donor = self.communities[donor].get_response(action, nudge_message)
             print(f'DONOR RESPONSE: {response_donor}')
 
@@ -92,14 +84,14 @@ class NudgingEnv(gym.Env):
             message_bandit.learn(option, response_donor)
 
             if response_donor:
-                response_donee = self.communities[donee].get_response(action)
-                print(f'DONEE RESPONSE: {response_donee}')
+                response_recipient = self.communities[recipient].get_response(action)
+                print(f'recipient RESPONSE: {response_recipient}')
 
-            if response_donor and response_donee:
+            if response_donor and response_recipient:
                 self.communities[donor].karma_points += 0.0001
                 message_bandit.print_feedback(option)
                 self.communities[donor].available_resources -= 1
-                self.communities[donee].available_resources += 1
+                self.communities[recipient].available_resources += 1
                 response_reward = 250
 
             else:
@@ -176,3 +168,9 @@ class NudgingEnv(gym.Env):
         self.insufficiency_amt = 0
         for community in self.communities:
             self.insufficiency_amt += max(0, community.required_resources- community.available_resources)
+
+    def convert_action(self, action):
+        donor = action//(NUM_COMMUNITIES-1)
+        recipient_index = action%(NUM_COMMUNITIES-1)
+        recipient = self.donor_to_recipient[donor][recipient_index]
+        return [donor, recipient]

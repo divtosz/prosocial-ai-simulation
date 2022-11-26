@@ -24,12 +24,12 @@ class CommunityModel:
 
         # initialize pyactr chunk types
         actr.chunktype("start_donor", "sentiment, resource_amount")
-        actr.chunktype("start_donee", "sentiment, resource_requirement")
+        actr.chunktype("start_recipient", "sentiment, resource_requirement")
 
         self.utilities = [0 for i in range(24)]
         self.sentiment_val = 0
         self.donor = None
-        self.donee = None
+        self.recipient = None
         self.sentiments = sentiments[id]
 
         # possible conditions that can exist in a community at any given time
@@ -40,6 +40,10 @@ class CommunityModel:
 
         # assuming each community has 2 trigger words they respond to, which increases their chances of accepting a nudge to donate
         self.trigger_words = deepcopy(random.sample(POSSIBLE_TRIGGER_WORDS, NUM_TRIGGER_WORDS))
+        self.donor_to_recipient = {0: [1,2,3],
+                                    1: [0,2,3],
+                                    2:[0,1,3],
+                                    3:[0,1,2]}
 
 
     def set_available_resources(self, available_resources):
@@ -173,12 +177,12 @@ class CommunityModel:
         )
 
 
-    # initialize all possible donee productions
-    def initialize_donee_productions(self):
+    # initialize all possible recipient productions
+    def initialize_recipient_productions(self):
 
         self.actr_response_model.productionstring(name="neutral_desirable_accept_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'neutral'
         resource_requirement 'desirable'
         ==>
@@ -188,7 +192,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="neutral_desirable_reject_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'neutral'
         resource_requirement 'desirable'
         ==>
@@ -198,7 +202,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="neutral_desperate_accept_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'neutral'
         resource_requirement 'desperate'
         ==>
@@ -208,7 +212,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="neutral_desperate_reject_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'neutral'
         resource_requirement 'desperate'
         ==>
@@ -218,7 +222,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="positive_desirable_accept_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'positive'
         resource_requirement 'desirable'
         ==>
@@ -228,7 +232,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="positive_desirable_reject_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'positive'
         resource_requirement 'desirable'
         ==>
@@ -238,7 +242,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="positive_desperate_accept_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'positive'
         resource_requirement 'desperate'
         ==>
@@ -248,7 +252,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="positive_desperate_reject_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'positive'
         resource_requirement 'desperate'
         ==>
@@ -258,7 +262,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="negative_desirable_accept_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'negative'
         resource_requirement 'desirable'
         ==>
@@ -268,7 +272,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="negative_desirable_reject_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'negative'
         resource_requirement 'desirable'
         ==>
@@ -278,7 +282,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="negative_desperate_accept_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'negative'
         resource_requirement 'desperate'
         ==>
@@ -288,7 +292,7 @@ class CommunityModel:
 
         self.actr_response_model.productionstring(name="negative_desperate_reject_donation", string="""
         =g>
-        isa start_donee
+        isa start_recipient
         sentiment 'negative'
         resource_requirement 'desperate'
         ==>
@@ -304,19 +308,7 @@ class CommunityModel:
         if nudge_message:
             is_donor = True
             self.nudge_message = nudge_message
-        self.donor = action//(NUM_COMMUNITIES-1)
-        donee_index = action%(NUM_COMMUNITIES-1)
-        i = 0
-        steps = 0
-        if self.donor == 0:
-            i = 1
-        while steps < donee_index:
-            if i == self.donor:
-                i += 1
-                continue
-            i += 1
-            steps += 1
-        self.donee = i
+        [self.donor, self.recipient] = self.convert_action(action)
 
         print(f'\nCommunity {self.id}')
         if is_donor:
@@ -325,7 +317,7 @@ class CommunityModel:
 
             # run donating simulation
             self.initialize_donor_productions()
-            self.sentiment_val = self.sentiments[self.donee]
+            self.sentiment_val = self.sentiments[self.recipient]
             if 0.4 <= self.sentiment_val <= 0.6:
                 sentiment = "neutral"
             elif self.sentiment_val < 0.4:
@@ -337,8 +329,8 @@ class CommunityModel:
             else:
                 self.actr_response_model.goal.add(actr.makechunk(typename = "start_donor", sentiment = sentiment, resource_amount = "maintenance"))
         else:
-            # run donee simulation
-            self.initialize_donee_productions()
+            # run recipient simulation
+            self.initialize_recipient_productions()
             self.sentiment_val = self.sentiments[self.donor]
             if 0.4 <= self.sentiment_val <= 0.6:
                 sentiment = "neutral"
@@ -347,9 +339,9 @@ class CommunityModel:
             else:
                 sentiment = "positive"
             if self.available_resources <= 0.75 * self.required_resources: # desperate
-                self.actr_response_model.goal.add(actr.makechunk(typename = "start_donee", sentiment = sentiment, resource_requirement = "desperate"))
+                self.actr_response_model.goal.add(actr.makechunk(typename = "start_recipient", sentiment = sentiment, resource_requirement = "desperate"))
             else:
-                self.actr_response_model.goal.add(actr.makechunk(typename = "start_donee", sentiment = sentiment, resource_requirement = "desirable"))
+                self.actr_response_model.goal.add(actr.makechunk(typename = "start_recipient", sentiment = sentiment, resource_requirement = "desirable"))
 
         sim = self.actr_response_model.simulation(trace = False)
         sim.steps(2)
@@ -358,7 +350,7 @@ class CommunityModel:
         self.response = (response == 'accept')
 
         if self.response and not is_donor:
-            # increase donee's sentiments towards donor
+            # increase recipient's sentiments towards donor
             self.sentiments[self.donor] = min(self.sentiments[self.donor] * 1.0001, 1)
             self.sentiment_val = self.sentiments[self.donor]
 
@@ -366,9 +358,14 @@ class CommunityModel:
         if is_donor:
             self.set_donor_utilities()
         else:
-            self.set_donee_utilities()
+            self.set_recipient_utilities()
         return self.response
 
+    def convert_action(self, action):
+        donor = action//(NUM_COMMUNITIES-1)
+        recipient_index = action%(NUM_COMMUNITIES-1)
+        recipient = self.donor_to_recipient[donor][recipient_index]
+        return [donor, recipient]
 
     def set_donor_utilities(self):
         self.utilities[:12] = [self.actr_response_model.productions['neutral_surplus_accept']['utility'],
@@ -385,7 +382,7 @@ class CommunityModel:
                         self.actr_response_model.productions['negative_maintenance_reject']['utility']]
         
 
-    def set_donee_utilities(self):
+    def set_recipient_utilities(self):
         self.utilities[12:] = [self.actr_response_model.productions['neutral_desirable_accept_donation']['utility'],
                     self.actr_response_model.productions['neutral_desirable_reject_donation']['utility'],
                     self.actr_response_model.productions['neutral_desperate_accept_donation']['utility'],
@@ -409,7 +406,7 @@ class CommunityModel:
         
         if len(response_array) == 3:
             # donor
-            self.sentiment_val = self.sentiments[self.donee]
+            self.sentiment_val = self.sentiments[self.recipient]
             message_words = set(re.split('[ !,.]', self.nudge_message.lower()))
 
             # if the message contains trigger words for the community, they are more likely to accept
@@ -425,7 +422,7 @@ class CommunityModel:
                 reward = 1/trigger_factor * (1-self.sentiment_val) * self.required_resources/(self.available_resources - self.required_resources) # if more resources, they should be more likely to share 
                                                                                             # so inversely proportion to both sentiment (positive feelings) and extra amount, as well as trigger factor (if more than 1)
         else:
-            # donee
+            # recipient
             self.sentiment_val = self.sentiments[self.donor]
 
             # factor of 50% extra reward because people are likely to be less picky about accepting a donation than donating

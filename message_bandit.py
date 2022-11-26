@@ -27,17 +27,17 @@ class MessageBandit:
         self.w = [self.w0 for i in range(self.num_messages)]
         self.cum_rew = 0
 
-    # make a nudge suggestion, based on what the agent knows about the donor, and current conditions in the donee community
-    def suggest(self, donee_current_conditions):
+    # make a nudge suggestion, based on what the agent knows about the donor, and current conditions in the recipient community
+    def suggest(self, recipient_current_conditions):
         
-        # in the case none of the conditions are currently present in the donee community
-        if len(donee_current_conditions) == 0:
+        # in the case none of the conditions are currently present in the recipient community
+        if len(recipient_current_conditions) == 0:
             return ['This community needs help.', -1]
         
-        # only generate a true message, something that is actually happening in the donee community
+        # only generate a true message, something that is actually happening in the recipient community
         currently_present_mask = [0 for i in range(self.num_messages)]
         for i, message in enumerate(self.messages[0]):
-            if message in donee_current_conditions:
+            if message in recipient_current_conditions:
                 currently_present_mask[i] = 1
 
         # suggest nudge message option based on these factors
