@@ -18,9 +18,11 @@ TOTAL_RESOURCES_REQUIRED = 100
 
 class NudgingEnv(gym.Env):
 
-    def __init__(self):
+    def __init__(self, preset_available_resources = None, preset_required_resources = None):
         super(NudgingEnv, self).__init__()
         # Define action and observation space
+        self.preset_available_resources = preset_available_resources
+        self.preset_required_resources = preset_required_resources
         
         self.action_space = spaces.Discrete(12)
         self.donor_to_recipient = {0: [1,2,3],
@@ -130,8 +132,12 @@ class NudgingEnv(gym.Env):
         # use the same community objects, to train over multiple episodes incorporating their changes too
         karma_points = [self.communities[i].karma_points for i in range(NUM_COMMUNITIES)]
 
-        # initialize resources based on communities' karma points, making sure there is an insufficiency
-        [available_resources, required_resources] = self.community_manager.initialize_resources(karma_points)
+        if self.preset_available_resources and self.preset_required_resources:
+            available_resources = self.preset_available_resources
+            required_resources = self.preset_required_resources 
+        else:
+            # initialize resources based on communities' karma points, making sure there is an insufficiency
+            [available_resources, required_resources] = self.community_manager.initialize_resources(karma_points)
         for i in range(NUM_COMMUNITIES):
             self.communities[i].set_available_resources(available_resources[i])
             self.communities[i].set_required_resources(required_resources[i])
